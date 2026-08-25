@@ -671,29 +671,42 @@ document.getElementById('themeBtn').addEventListener('click', () => { buildTheme
 document.getElementById('missionBtn').addEventListener('click', () => { buildMissionList(); openPanel('missionPanel'); });
 
 // ---- AdMob rewarded ad (only works inside the compiled native app, not in a browser) ----
-const ADMOB_REWARDED_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917';
+const ADMOB_REWARDED_UNIT_ID = 'ca-app-pub-2648920635925261/6467739338';
 const AD_REWARD_GEMS = 25;
 let adReady = false;
+let adLoading = false;
+
+function loadRewardAd() {
+  const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
+  if (!AdMobPlugin || adLoading || adReady) return;
+  adLoading = true;
+  AdMobPlugin.prepareRewardVideoAd({ adId: ADMOB_REWARDED_UNIT_ID })
+    .catch((e) => console.error('Ad preload failed', e))
+    .finally(() => { adLoading = false; });
+}
 
 async function initAdMob() {
   const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
-  if (!AdMobPlugin) return; // running in a regular browser, not the native app
+  if (!AdMobPlugin) return;
   try {
-    await AdMobPlugin.initialize({ requestTrackingAuthorization: true });
+    await AdMobPlugin.initialize();
     AdMobPlugin.addListener('onRewardedVideoAdReward', () => {
       addGemsToWallet(AD_REWARD_GEMS);
       const btn = document.getElementById('adBtn');
       if (btn) btn.textContent = `+${AD_REWARD_GEMS} 💎 Claimed!`;
       setTimeout(() => { if (btn) btn.textContent = '🎥 Free Gems'; }, 2000);
     });
-    AdMobPlugin.addListener('onRewardedVideoAdLoaded', () => { adReady = true; });
-    AdMobPlugin.addListener('onRewardedVideoAdFailedToLoad', () => { adReady = false; });
-    await AdMobPlugin.prepareRewardVideoAd({ adId: ADMOB_REWARDED_UNIT_ID });
+    AdMobPlugin.addListener('onRewardedVideoAdLoaded', () => { adReady = true; adLoading = false; });
+    AdMobPlugin.addListener('onRewardedVideoAdFailedToLoad', () => { adReady = false; adLoading = false; });
+    AdMobPlugin.addListener('onRewardedVideoAdDismissed', () => { adReady = false; loadRewardAd(); });
+    loadRewardAd();
   } catch (e) {
     console.error('AdMob init failed', e);
   }
 }
 initAdMob();
+
+setInterval(loadRewardAd, 15000);
 
 document.getElementById('adBtn').addEventListener('click', async () => {
   const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
@@ -701,13 +714,19 @@ document.getElementById('adBtn').addEventListener('click', async () => {
     alert('Ads only work in the installed app — not in a browser preview.');
     return;
   }
+  if (!adReady) {
+    alert('Ad is still loading — give it a few seconds and try again.');
+    loadRewardAd();
+    return;
+  }
   try {
     await AdMobPlugin.showRewardVideoAd();
-    adReady = false;
-    await AdMobPlugin.prepareRewardVideoAd({ adId: ADMOB_REWARDED_UNIT_ID }); // preload the next one
   } catch (e) {
     console.error('Ad failed to show', e);
-    alert('No ad available right now — try again in a moment.');
+    alert('Ad failed to show — try again in a moment.');
+  } finally {
+    adReady = false;
+    loadRewardAd();
   }
 });
 document.querySelectorAll('.panel-close-x').forEach(b => {
