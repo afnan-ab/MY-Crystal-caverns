@@ -675,19 +675,24 @@ const ADMOB_REWARDED_UNIT_ID = 'ca-app-pub-2648920635925261/6467739338';
 const AD_REWARD_GEMS = 25;
 let adReady = false;
 let adLoading = false;
+let adDebugInfo = 'no attempt yet';
 
 function loadRewardAd() {
   const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
   if (!AdMobPlugin || adLoading || adReady) return;
   adLoading = true;
+  adDebugInfo = 'loading...';
   AdMobPlugin.prepareRewardVideoAd({ adId: ADMOB_REWARDED_UNIT_ID })
-    .catch((e) => console.error('Ad preload failed', e))
+    .catch((e) => {
+      adDebugInfo = 'prepare() threw: ' + (e && (e.message || JSON.stringify(e)));
+      console.error('Ad preload failed', e);
+    })
     .finally(() => { adLoading = false; });
 }
 
 async function initAdMob() {
   const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
-  if (!AdMobPlugin) return;
+  if (!AdMobPlugin) { adDebugInfo = 'AdMob plugin not found on window.Capacitor.Plugins'; return; }
   try {
     await AdMobPlugin.initialize();
     AdMobPlugin.addListener('onRewardedVideoAdReward', () => {
@@ -696,11 +701,16 @@ async function initAdMob() {
       if (btn) btn.textContent = `+${AD_REWARD_GEMS} 💎 Claimed!`;
       setTimeout(() => { if (btn) btn.textContent = '🎥 Free Gems'; }, 2000);
     });
-    AdMobPlugin.addListener('onRewardedVideoAdLoaded', () => { adReady = true; adLoading = false; });
-    AdMobPlugin.addListener('onRewardedVideoAdFailedToLoad', () => { adReady = false; adLoading = false; });
+    AdMobPlugin.addListener('onRewardedVideoAdLoaded', () => { adReady = true; adLoading = false; adDebugInfo = 'loaded OK'; });
+    AdMobPlugin.addListener('onRewardedVideoAdFailedToLoad', (info) => {
+      adReady = false; adLoading = false;
+      adDebugInfo = 'failedToLoad event: ' + JSON.stringify(info);
+      console.error('onRewardedVideoAdFailedToLoad', info);
+    });
     AdMobPlugin.addListener('onRewardedVideoAdDismissed', () => { adReady = false; loadRewardAd(); });
     loadRewardAd();
   } catch (e) {
+    adDebugInfo = 'initialize() threw: ' + (e && (e.message || JSON.stringify(e)));
     console.error('AdMob init failed', e);
   }
 }
@@ -710,6 +720,25 @@ setInterval(loadRewardAd, 15000);
 
 document.getElementById('adBtn').addEventListener('click', async () => {
   const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
+  if (!AdMobPlugin) {
+    alert('Ads only work in the installed app — not in a browser preview.');
+    return;
+  }
+  if (!adReady) {
+    alert('Ad not ready.\n\nDebug info: ' + adDebugInfo);
+    loadRewardAd();
+    return;
+  }
+  try {
+    await AdMobPlugin.showRewardVideoAd();
+  } catch (e) {
+    console.error('Ad failed to show', e);
+    alert('Ad failed to show — try again in a moment.');
+  } finally {
+    adReady = false;
+    loadRewardAd();
+  }
+});
   if (!AdMobPlugin) {
     alert('Ads only work in the installed app — not in a browser preview.');
     return;
