@@ -370,6 +370,9 @@
   </div>
 
 <script>
+window.addEventListener('error', (e) => {
+  alert('JS ERROR: ' + e.message + '\nFile: ' + (e.filename||'').split('/').pop() + ' Line: ' + e.lineno + ':' + e.colno);
+});
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
@@ -593,9 +596,4 @@ setInterval(loadRewardAd, 15000);
 
 document.getElementById('adBtn').addEventListener('click', async () => {
   const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
-  if (!AdMobPlugin) {
-    alert('Ads only work in the installed app — not in a browser preview.');
-    return;
-  }
-  if (!adReady) {
-    alert('Ad not ready.\n\nDebug info: ' + ad
+  if (!AdM
