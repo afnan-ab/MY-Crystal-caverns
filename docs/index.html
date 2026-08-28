@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Crystal Caverns</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --accent: #ffd166;
+    --accent-dark: #f4a527;
+    --bg1: #1b2a4a;
+    --bg2: #0a1830;
+    --secondary: #a0e7e5;
+  }
+  body {
+    background: linear-gradient(var(--bg1), var(--bg2));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    color: #eee;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 8px 0 30px;
+    transition: background 0.5s;
+  }
+  body.in-game {
+    padding: 0;
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh;
+  }
+  h1 {
+    color: var(--accent);
+    text-shadow: 0 0 10px rgba(255,209,102,0.6);
+    margin-bottom: 6px;
+    letter-spacing: 2px;
+    font-size: 22px;
+    text-align: center;
+  }
+  .hidden { display: none !important; }
+
+  /* ---- Lobby ---- */
+  #lobbyScreen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 90vh;
+    width: 100%;
+    padding: 20px;
+    text-align: center;
+  }
+  #lobbyScreen h1 { font-size: 34px; margin-bottom: 4px; }
+  .tagline {
+    color: var(--secondary);
+    font-size: 14px;
+    margin-bottom: 30px;
+    opacity: 0.85;
+  }
+  .lobby-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 90%;
+    max-width: 280px;
+  }
+  .lobby-buttons button {
+    padding: 16px;
+    font-size: 17px;
+    font-weight: bold;
+    border: none;
+    border-radius: 14px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  #playBtn {
+    background: linear-gradient(var(--accent), var(--accent-dark));
+    color: #1a1a2e;
+    box-shadow: 0 6px 18px rgba(255,209,102,0.4);
+    font-size: 20px;
+  }
+  #themeBtn, #adBtn {
+    background: rgba(255,255,255,0.08);
+    color: var(--accent);
+    border: 2px solid var(--accent);
+  }
+
+  /* ---- Modal panels ---- */
+  .panel-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 16px;
+  }
+  .panel-card {
+    background: linear-gradient(#20304f, #10192e);
+    border: 2px solid var(--accent);
+    border-radius: 16px;
+    padding: 22px;
+    max-width: 420px;
+    width: 100%;
+    max-height: 80vh;
+    box-shadow: 0 0 30px rgba(0,0,0,0.5);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel-body {
+    overflow-y: auto;
+  }
+  .panel-close-x {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: rgba(255,255,255,0.08);
+    border: none;
+    color: var(--accent);
+    font-size: 18px;
+    font-weight: bold;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+    line-height: 1;
+    z-index: 5;
+  }
+  .panel-card h2 {
+    color: var(--accent);
+    margin-bottom: 14px;
+    font-size: 20px;
+    text-align: center;
+  }
+  #themeGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .theme-swatch {
+    border-radius: 10px;
+    padding: 14px 8px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 13px;
+    font-weight: bold;
+    border: 2px solid transparent;
+    color: #fff;
+  }
+  .theme-swatch.active { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.6); }
+
+  /* ---- Game screen ---- */
+  #gameScreen {
+    width: 100%;
+  }
+  #walletDisplay {
+    background: rgba(255,255,255,0.08);
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    font-weight: bold;
+    font-size: 16px;
+    padding: 6px 18px;
+    border-radius: 20px;
+    margin-bottom: 10px;
+  }
+  #scoreDisplay {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  #scoreDisplay div {
+    font-size: 13px;
+    color: var(--secondary);
+    opacity: 0.85;
+  }
+  #scoreDisplay span { color: var(--accent); font-weight: bold; }
+  #walletDisplayPanel {
+    text-align: center;
+    color: var(--accent);
+    font-weight: bold;
+    font-size: 15px;
+    margin-bottom: 14px;
+  }
+  .theme-swatch.locked { opacity: 0.75; }
+  .theme-swatch .cost { font-size: 11px; opacity: 0.9; }
+  #themeMsg {
+    text-align: center;
+    color: #ff8fa3;
+    font-size: 13px;
+    min-height: 16px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    margin-top: -6px;
+    margin-bottom: 6px;
+  }
+
+  /* ---- Fullscreen game view: canvas fills the screen, everything else overlays it ---- */
+  #canvasWrap {
+    position: relative;
+    width: 100vw;
+    height: 100dvh;
+    height: 100vh;
+    overflow: hidden;
+    background: #0f3460;
+  }
+  /* Force landscape presentation when the phone is held portrait — the game
+     world is a 16:9 landscape shape, so rotate the whole view instead of
+     stretching it. */
+  @media (orientation: portrait) {
+    body.in-game #canvasWrap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vh;
+      height: 100vw;
+      transform-origin: top left;
+      transform: rotate(90deg) translateY(-100%);
+    }
+  }
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    display: block;
+  }
+  #hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 16px;
+    padding: 10px 8px 8px;
+    font-size: 13px;
+    font-weight: bold;
+    background: linear-gradient(rgba(0,0,0,0.55), rgba(0,0,0,0));
+    z-index: 10;
+    pointer-events: none;
+  }
+  #hud span { color: var(--accent); }
+  #msg {
+    position: absolute;
+    top: 46px;
+    left: 8px; right: 8px;
+    font-size: 12px;
+    color: var(--secondary);
+    text-align: center;
+    padding: 4px 10px;
+    background: rgba(0,0,0,0.35);
+    border-radius: 12px;
+    width: fit-content;
+    max-width: 90%;
+    margin: 0 auto;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #controls {
+    position: absolute;
+    bottom: 18px;
+    left: 0; right: 0;
+    display: flex;
+    gap: 40px;
+    width: 92%;
+    max-width: 480px;
+    margin: 0 auto;
+    justify-content: space-between;
+    z-index: 10;
+  }
+  #controls button {
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    background: rgba(20,20,35,0.55);
+    color: var(--accent);
+    font-size: 22px;
+    font-weight: bold;
+    touch-action: manipulation;
+  }
+  #controls .side { display: flex; gap: 16px; }
+  #lobbyBtn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: rgba(20,20,35,0.55);
+    color: var(--accent);
+    border: 2px solid var(--accent);
+    font-size: 16px;
+    z-index: 15;
+  }
+  #restartBtn {
+    display: none;
+    position: absolute;
+    top: 62%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 12px 28px;
+    border: none;
+    border-radius: 24px;
+    font-weight: bold;
+    font-size: 15px;
+    background: linear-gradient(var(--accent), var(--accent-dark));
+    color: #1a1a2e;
+    box-shadow: 0 4px 12px rgba(255,209,102,0.4);
+    z-index: 15;
+  }
+</style>
+</head>
+<body>
+  <div id="lobbyScreen">
+    <h1>💎 Crystal Caverns</h1>
+    <div class="tagline">Collect gems. Dodge golems. Find the portal.</div>
+    <div id="walletDisplay">💎 <span id="walletAmount">0</span></div>
+    <div id="scoreDisplay">
+      <div id="lastRunRow" class="hidden">Last Run: Level <span id="lastRunLevel">-</span> · <span id="lastRunGems">0</span>💎</div>
+      <div id="bestRunRow" class="hidden">Best Run: Level <span id="bestRunLevel">-</span> · <span id="bestRunGems">0</span>💎</div>
+    </div>
+    <div class="lobby-buttons">
+      <button id="playBtn">▶ Play</button>
+      <button id="themeBtn">🎨 Theme</button>
+      <button id="adBtn">🎥 Free Gems</button>
+    </div>
+  </div>
+
+  <div id="themePanel" class="panel-overlay hidden">
+    <div class="panel-card">
+      <button class="panel-close-x" data-close="themePanel">✕</button>
+      <h2>🎨 Choose a Theme</h2>
+      <div class="panel-body">
+        <div id="walletDisplayPanel">💎 <span id="walletAmountPanel">0</span></div>
+        <div id="themeGrid"></div>
+        <div id="themeMsg"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameScreen" class="hidden">
+    <div id="canvasWrap">
+      <canvas id="game" width="800" height="450"></canvas>
+      <div id="hud">
+        <div>Level: <span id="lvl">1</span></div>
+        <div>Gems: <span id="gems">0</span></div>
+        <div>Lives: <span id="lives">3</span></div>
+        <div>Bank: <span id="hudWallet">0</span>💎</div>
+      </div>
+      <div id="msg">Arrow keys / WASD to move, Space or Up to jump. Reach the glowing portal!</div>
+      <div id="controls">
+        <div class="side">
+          <button id="btnLeft">◀</button>
+          <button id="btnRight">▶</button>
+        </div>
+        <button id="btnJump">▲</button>
+      </div>
+      <button id="lobbyBtn">🏠</button>
+      <button id="restartBtn">🔄 Play Again</button>
+    </div>
+  </div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const GRAVITY = 0.6;
+const FRICTION = 0.82;
+
+// ---- Themes ----
+const THEMES = [
+  { name:'Crystal Cavern', accent:'#ffd166', accentDark:'#f4a527', bg1:'#1b2a4a', bg2:'#0a1830',
+    platformTop:'#5a9c6d', platformBottom:'#26402e', platformStroke:'rgba(111,174,127,0.8)',
+    gem:'#a0e7e5', enemy:'#e63946', enemyDark:'#7a1f2b', portalRGB:'255,209,102', secondary:'#a0e7e5', cost:0 },
+  { name:'Lava Depths', accent:'#ff7b54', accentDark:'#d9480f', bg1:'#3a0d0d', bg2:'#150404',
+    platformTop:'#7a4a2a', platformBottom:'#331d0e', platformStroke:'rgba(255,123,84,0.7)',
+    gem:'#ffd23f', enemy:'#9b5de5', enemyDark:'#4a1f6e', portalRGB:'255,123,84', secondary:'#ffb677', cost:30 },
+  { name:'Emerald Forest', accent:'#6fcf97', accentDark:'#2f9e5c', bg1:'#0d2b1a', bg2:'#04140c',
+    platformTop:'#8a5a3a', platformBottom:'#4a3220', platformStroke:'rgba(111,207,151,0.7)',
+    gem:'#ff8fa3', enemy:'#f4a261', enemyDark:'#7a4a1f', portalRGB:'111,207,151', secondary:'#a8e6b0', cost:45 },
+  { name:'Frozen Night', accent:'#4cc9f0', accentDark:'#1f8fbf', bg1:'#0a1a3a', bg2:'#03081a',
+    platformTop:'#3a5a7a', platformBottom:'#1a2c40', platformStroke:'rgba(76,201,240,0.7)',
+    gem:'#ffffff', enemy:'#c77dff', enemyDark:'#5a2d7a', portalRGB:'76,201,240', secondary:'#9edcf0', cost:60 },
+  { name:'Golden Desert', accent:'#ffb703', accentDark:'#b5750a', bg1:'#4a2c0d', bg2:'#1e1005',
+    platformTop:'#c98a3a', platformBottom:'#6b4315', platformStroke:'rgba(255,183,3,0.7)',
+    gem:'#fff2cc', enemy:'#d1495b', enemyDark:'#6b1f28', portalRGB:'255,183,3', secondary:'#ffd699', cost:55 },
+  { name:'Coral Reef', accent:'#ff6f91', accentDark:'#d13d63', bg1:'#0a2b3a', bg2:'#031318',
+    platformTop:'#2a9d8f', platformBottom:'#12463f', platformStroke:'rgba(255,111,145,0.7)',
+    gem:'#ffe066', enemy:'#ff6f91', enemyDark:'#7a1f35', portalRGB:'255,224,102', secondary:'#7fd8be', cost:75 },
+  { name:'Neon Void', accent:'#ff2fe0', accentDark:'#a100ff', bg1:'#1a0033', bg2:'#05000f',
+    platformTop:'#5a3399', platformBottom:'#24123f', platformStroke:'rgba(255,47,224,0.7)',
+    gem:'#00fff0', enemy:'#ff2fe0', enemyDark:'#7a0060', portalRGB:'0,255,240', secondary:'#c77dff', cost:90 },
+  { name:'Toxic Swamp', accent:'#b5e655', accentDark:'#6f9c2e', bg1:'#1a2b0d', bg2:'#0a1204',
+    platformTop:'#4a6b1f', platformBottom:'#22300c', platformStroke:'rgba(181,230,85,0.7)',
+    gem:'#c77dff', enemy:'#7a2fbf', enemyDark:'#3a1560', portalRGB:'181,230,85', secondary:'#d4f0a0', cost:100 },
+  { name:'Aurora Borealis', accent:'#7dffcb', accentDark:'#2fbf8f', bg1:'#0a1a2e', bg2:'#020810',
+    platformTop:'#2f6b6b', platformBottom:'#123333', platformStroke:'rgba(125,255,203,0.7)',
+    gem:'#c77dff', enemy:'#ff9770', enemyDark:'#7a3a1f', portalRGB:'125,255,203', secondary:'#9ee6d8', cost:130 },
+  { name:'Midnight Amethyst', accent:'#b388ff', accentDark:'#6b3fbf', bg1:'#1c0a2e', bg2:'#0a0314',
+    platformTop:'#5a3a7a', platformBottom:'#2a1a40', platformStroke:'rgba(179,136,255,0.7)',
+    gem:'#ffd166', enemy:'#ff5c8a', enemyDark:'#7a1f3a', portalRGB:'179,136,255', secondary:'#d4b8ff', cost:150 },
+  { name:'Blood Moon', accent:'#ff3b3b', accentDark:'#a30000', bg1:'#2b0505', bg2:'#100101',
+    platformTop:'#5a1a1a', platformBottom:'#2a0a0a', platformStroke:'rgba(255,59,59,0.7)',
+    gem:'#ffb703', enemy:'#7a1f7a', enemyDark:'#3a0f3a', portalRGB:'255,59,59', secondary:'#ff9e9e', cost:170 },
+  { name:'Sunset Dunes', accent:'#ff9e5e', accentDark:'#d9601f', bg1:'#3a1a2e', bg2:'#170a14',
+    platformTop:'#9c5a3a', platformBottom:'#4a2a1a', platformStroke:'rgba(255,158,94,0.7)',
+    gem:'#ffe6a8', enemy:'#5e5eff', enemyDark:'#2a2a7a', portalRGB:'255,158,94', secondary:'#ffcf9e', cost:190 },
+  { name:'Deep Ocean', accent:'#3fd0ff', accentDark:'#0e7fb0', bg1:'#021a2e', bg2:'#000a14',
+    platformTop:'#1a4a6b', platformBottom:'#0a2233', platformStroke:'rgba(63,208,255,0.7)',
+    gem:'#ffe066', enemy:'#ff6f61', enemyDark:'#7a1f18', portalRGB:'63,208,255', secondary:'#9ee6ff', cost:210 }
+];
+let theme = THEMES[0];
+
+// ---- Persistent wallet & unlocks (falls back to in-memory if storage unavailable) ----
+function storageGet(key, fallback) {
+  try {
+    const v = localStorage.getItem(key);
+    return v !== null ? JSON.parse(v) : fallback;
+  } catch(e) { return fallback; }
+}
+function storageSet(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch(e) {}
+}
+let wallet = storageGet('cc_wallet', 0);
+let unlockedThemes = storageGet('cc_unlocked', ['Crystal Cavern']);
+
+// ---- Last run / best run score tracking ----
+let lastRun = storageGet('cc_lastrun', null);
+let bestRun = storageGet('cc_bestrun', null);
+
+function updateScoreDisplay() {
+  const lastRow = document.getElementById('lastRunRow');
+  const bestRow = document.getElementById('bestRunRow');
+  if (lastRun) {
+    lastRow.classList.remove('hidden');
+    document.getElementById('lastRunLevel').textContent = lastRun.level;
+    document.getElementById('lastRunGems').textContent = lastRun.gems;
+  }
+  if (bestRun) {
+    bestRow.classList.remove('hidden');
+    document.getElementById('bestRunLevel').textContent = bestRun.level;
+    document.getElementById('bestRunGems').textContent = bestRun.gems;
+  }
+}
+
+function recordRunResult(runLevel, runGems) {
+  lastRun = { level: runLevel, gems: runGems };
+  storageSet('cc_lastrun', lastRun);
+  if (!bestRun || runLevel > bestRun.level || (runLevel === bestRun.level && runGems > bestRun.gems)) {
+    bestRun = { level: runLevel, gems: runGems };
+    storageSet('cc_bestrun', bestRun);
+  }
+  updateScoreDisplay();
+}
+
+function saveWallet() { storageSet('cc_wallet', wallet); }
+function saveUnlocked() { storageSet('cc_unlocked', unlockedThemes); }
+
+// ---- Lifetime stats (kept for internal tracking; missions UI removed) ----
+let stats = storageGet('cc_stats', { highestLevel: 0, totalGems: 0, gamesPlayed: 0, totalEarned: 0, noHitLevels: 0 });
+function saveStats() { storageSet('cc_stats', stats); }
+
+function addGemsToWallet(n) {
+  wallet += n;
+  stats.totalEarned = (stats.totalEarned || 0) + n;
+  saveStats();
+  saveWallet();
+  updateWalletDisplay();
+}
+
+function updateWalletDisplay() {
+  const el = document.getElementById('walletAmount');
+  if (el) el.textContent = wallet;
+  const el2 = document.getElementById('walletAmountPanel');
+  if (el2) el2.textContent = wallet;
+  const el3 = document.getElementById('hudWallet');
+  if (el3) el3.textContent = wallet;
+}
+
+function applyTheme(t) {
+  theme = t;
+  const r = document.documentElement.style;
+  r.setProperty('--accent', t.accent);
+  r.setProperty('--accent-dark', t.accentDark);
+  r.setProperty('--bg1', t.bg1);
+  r.setProperty('--bg2', t.bg2);
+  r.setProperty('--secondary', t.secondary);
+}
+
+function buildThemeGrid() {
+  const grid = document.getElementById('themeGrid');
+  grid.innerHTML = '';
+  THEMES.forEach(t => {
+    const owned = unlockedThemes.includes(t.name);
+    const btn = document.createElement('div');
+    btn.className = 'theme-swatch' + (t === theme ? ' active' : '') + (owned ? '' : ' locked');
+    btn.style.background = `linear-gradient(135deg, ${t.bg1}, ${t.accentDark})`;
+    btn.innerHTML = owned
+      ? t.name
+      : `${t.name}<br><span class="cost">🔒 💎${t.cost}</span>`;
+    btn.addEventListener('click', () => {
+      if (owned) {
+        applyTheme(t);
+        buildThemeGrid();
+      } else if (wallet >= t.cost) {
+        wallet -= t.cost;
+        saveWallet();
+        unlockedThemes.push(t.name);
+        saveUnlocked();
+        applyTheme(t);
+        updateWalletDisplay();
+        buildThemeGrid();
+      } else {
+        const msgEl = document.getElementById('themeMsg');
+        if (msgEl) {
+          msgEl.textContent = `Need ${t.cost - wallet} more gem${t.cost - wallet === 1 ? '' : 's'} to unlock ${t.name}!`;
+          msgEl.style.opacity = '1';
+          setTimeout(() => { msgEl.style.opacity = '0'; }, 2000);
+        }
+      }
+    });
+    grid.appendChild(btn);
+  });
+  updateWalletDisplay();
+}
+buildThemeGrid();
+updateScoreDisplay();
+
+function openPanel(id) { document.getElementById(id).classList.remove('hidden'); }
+function closePanel(id) { document.getElementById(id).classList.add('hidden'); }
+
+document.getElementById('themeBtn').addEventListener('click', () => { buildThemeGrid(); openPanel('themePanel'); });
+
+// ---- AdMob rewarded ad (only works inside the compiled native app, not in a browser) ----
+const ADMOB_REWARDED_UNIT_ID = 'ca-app-pub-2648920635925261/6467739338';
+const AD_REWARD_GEMS = 25;
+let adReady = false;
+let adLoading = false;
+let adDebugInfo = 'no attempt yet';
+
+function loadRewardAd() {
+  const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
+  if (!AdMobPlugin || adLoading || adReady) return;
+  adLoading = true;
+  adDebugInfo = 'loading...';
+  AdMobPlugin.prepareRewardVideoAd({ adId: ADMOB_REWARDED_UNIT_ID })
+    .catch((e) => {
+      adDebugInfo = 'prepare() threw: ' + (e && (e.message || JSON.stringify(e)));
+      console.error('Ad preload failed', e);
+    })
+    .finally(() => { adLoading = false; });
+}
+
+async function initAdMob() {
+  const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
+  if (!AdMobPlugin) { adDebugInfo = 'AdMob plugin not found on window.Capacitor.Plugins'; return; }
+  try {
+    await AdMobPlugin.initialize();
+    AdMobPlugin.addListener('onRewardedVideoAdReward', () => {
+      addGemsToWallet(AD_REWARD_GEMS);
+      const btn = document.getElementById('adBtn');
+      if (btn) btn.textContent = `+${AD_REWARD_GEMS} 💎 Claimed!`;
+      setTimeout(() => { if (btn) btn.textContent = '🎥 Free Gems'; }, 2000);
+    });
+    AdMobPlugin.addListener('onRewardedVideoAdLoaded', () => { adReady = true; adLoading = false; adDebugInfo = 'loaded OK'; });
+    AdMobPlugin.addListener('onRewardedVideoAdFailedToLoad', (info) => {
+      adReady = false; adLoading = false;
+      adDebugInfo = 'failedToLoad event: ' + JSON.stringify(info);
+      console.error('onRewardedVideoAdFailedToLoad', info);
+    });
+    AdMobPlugin.addListener('onRewardedVideoAdDismissed', () => { adReady = false; loadRewardAd(); });
+    loadRewardAd();
+  } catch (e) {
+    adDebugInfo = 'initialize() threw: ' + (e && (e.message || JSON.stringify(e)));
+    console.error('AdMob init failed', e);
+  }
+}
+initAdMob();
+
+// Keep retrying in the background every 15s if no ad is currently loaded — this is
+// what makes the button self-heal after a one-off network hiccup instead of staying
+// broken for the rest of the session.
+setInterval(loadRewardAd, 15000);
+
+document.getElementById('adBtn').addEventListener('click', async () => {
+  const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
+  if (!AdMobPlugin) {
+    alert('Ads only work in the installed app — not in a browser preview.');
+    return;
+  }
+  if (!adReady) {
+    alert('Ad not ready.\n\nDebug info: ' + ad
