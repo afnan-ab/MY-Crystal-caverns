@@ -370,9 +370,6 @@
   </div>
 
 <script>
-window.addEventListener('error', (e) => {
-  alert('JS ERROR: ' + e.message + '\nFile: ' + (e.filename||'').split('/').pop() + ' Line: ' + e.lineno + ':' + e.colno);
-});
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
@@ -596,4 +593,735 @@ setInterval(loadRewardAd, 15000);
 
 document.getElementById('adBtn').addEventListener('click', async () => {
   const AdMobPlugin = window.Capacitor?.Plugins?.AdMob;
-  if (!AdM
+  if (!AdMobPlugin) {
+    alert('Ads only work in the installed app — not in a browser preview.');
+    return;
+  }
+  if (!adReady) {
+    alert('Ad not ready.\n\nDebug info: ' + adDebugInfo);
+    loadRewardAd();
+    return;
+  }
+  try {
+    await AdMobPlugin.showRewardVideoAd();
+  } catch (e) {
+    console.error('Ad failed to show', e);
+    alert('Ad failed to show — try again in a moment.');
+  } finally {
+    adReady = false;
+    loadRewardAd(); // always try to line up the next one, success or failure
+  }
+});
+document.querySelectorAll('.panel-close-x').forEach(b => {
+  b.addEventListener('click', () => closePanel(b.dataset.close));
+});
+
+function tryEnterFullscreen() {
+  try {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (req) req.call(el).catch(() => {});
+  } catch (e) {}
+}
+function tryExitFullscreen() {
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) exit.call(document).catch(() => {});
+    }
+  } catch (e) {}
+}
+
+document.getElementById('playBtn').addEventListener('click', () => {
+  document.getElementById('lobbyScreen').classList.add('hidden');
+  document.getElementById('gameScreen').classList.remove('hidden');
+  document.body.classList.add('in-game');
+  tryEnterFullscreen();
+  restartGame();
+});
+document.getElementById('lobbyBtn').addEventListener('click', () => {
+  document.getElementById('gameScreen').classList.add('hidden');
+  document.getElementById('lobbyScreen').classList.remove('hidden');
+  document.body.classList.remove('in-game');
+  tryExitFullscreen();
+  gameState = 'paused';
+});
+
+let keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (['arrowup',' ','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) e.preventDefault();
+});
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+// Mobile buttons
+function bindHold(id, key) {
+  const el = document.getElementById(id);
+  const set = v => (e) => { e.preventDefault(); keys[key] = v; };
+  el.addEventListener('touchstart', set(true));
+  el.addEventListener('touchend', set(false));
+  el.addEventListener('mousedown', set(true));
+  el.addEventListener('mouseup', set(false));
+  el.addEventListener('mouseleave', set(false));
+}
+bindHold('btnLeft', 'arrowleft');
+bindHold('btnRight', 'arrowright');
+bindHold('btnJump', ' ');
+
+// ---- Sound effects (simple synth beeps, no assets needed) ----
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function beep(freq, duration, type='sine', vol=0.15, delay=0) {
+  try {
+    const ac = getAudio();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = vol;
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + delay + duration);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(ac.currentTime + delay);
+    osc.stop(ac.currentTime + delay + duration);
+  } catch(e) {}
+}
+function sfxJump() { beep(440, 0.12, 'square', 0.1); }
+function sfxGem() { beep(1046, 0.08, 'sine', 0.15); beep(1568, 0.1, 'sine', 0.12, 0.06); }
+function sfxHurt() { beep(140, 0.25, 'sawtooth', 0.15); }
+function sfxPortal() { beep(523, 0.1, 'sine', 0.12); beep(659, 0.1, 'sine', 0.12, 0.1); beep(784, 0.15, 'sine', 0.12, 0.2); }
+// unlock audio on first touch/click
+document.body.addEventListener('touchstart', () => getAudio(), {once:true});
+document.body.addEventListener('mousedown', () => getAudio(), {once:true});
+
+// ---- Level definitions ----
+// platforms: x, y, w, h
+// gems: x, y
+// enemies: x, y, range (patrol distance), speed
+// portal: x, y
+function makeLevels() {
+  return [
+    {
+      platforms: [
+        {x:0, y:410, w:800, h:40},
+        {x:150, y:330, w:120, h:20},
+        {x:330, y:270, w:100, h:20},
+        {x:480, y:330, w:120, h:20},
+        {x:650, y:250, w:100, h:20},
+      ],
+      gems: [{x:190,y:290},{x:370,y:230},{x:520,y:290},{x:690,y:210},{x:60,y:370}],
+      enemies: [{x:330,y:250,range:100,speed:2,startX:330}],
+      spawn: {x:40, y:360},
+      portal: {x:730, y:190}
+    },
+    {
+      platforms: [
+        {x:0, y:410, w:200, h:40},
+        {x:280, y:410, w:150, h:40},
+        {x:500, y:410, w:300, h:40},
+        {x:120, y:320, w:100, h:20},
+        {x:320, y:250, w:100, h:20},
+        {x:500, y:190, w:100, h:20},
+        {x:650, y:320, w:120, h:20},
+      ],
+      gems: [{x:160,y:280},{x:360,y:210},{x:540,y:150},{x:690,y:280},{x:60,y:370},{x:340,y:370}],
+      enemies: [
+        {x:280,y:390,range:130,speed:1.8,startX:280,onPlatform:{x:280,w:150,y:410}},
+        {x:500,y:170,range:80,speed:2.2,startX:500,onPlatform:{x:500,w:100,y:190}}
+      ],
+      spawn: {x:40, y:360},
+      portal: {x:760, y:280}
+    },
+    {
+      platforms: [
+        {x:0, y:410, w:150, h:40},
+        {x:200, y:350, w:90, h:20},
+        {x:340, y:290, w:90, h:20},
+        {x:480, y:230, w:90, h:20},
+        {x:620, y:170, w:90, h:20},
+        {x:600, y:410, w:200, h:40},
+      ],
+      gems: [{x:230,y:310},{x:370,y:250},{x:510,y:190},{x:650,y:130},{x:50,y:370},{x:700,y:370}],
+      enemies: [
+        {x:340,y:270,range:60,speed:2.5,startX:340,onPlatform:{x:340,w:90,y:290}},
+        {x:620,y:150,range:60,speed:2.5,startX:620,onPlatform:{x:620,w:90,y:170}}
+      ],
+      spawn: {x:40, y:360},
+      portal: {x:650, y:110}
+    }
+  ];
+}
+
+// ---- Procedural endless levels (kick in after the 3 hand-built ones) ----
+function generateLevel(idx) {
+  let s = (idx * 9301 + 49297) % 233280;
+  function rand() { s = (s * 9301 + 49297) % 233280; return s / 233280; }
+
+  // Difficulty ramps up gradually instead of jumping to max difficulty right at the
+  // first procedural level (idx 3, shown as "Level 4") — that sudden spike combined
+  // with near-max-height jumps is what made it feel impossible.
+  const rampProgress = Math.min(1, Math.max(0, (idx - 3) / 12)); // 0 at idx 3, 1 by idx 15
+  const numPlatforms = Math.min(10, 5 + Math.floor(idx / 3));
+  const heightRange = 130 + rampProgress * 150; // starts gentle (130-260), grows to 130-280+
+  const heightBase = 200 - rampProgress * 40;
+
+  let platforms = [{x:0, y:410, w:170, h:40}];
+  let curX = 170;
+  for (let i = 0; i < numPlatforms; i++) {
+    const w = 80 + rand() * 60;
+    let gap, y;
+    if (i === 0) {
+      // anchor the first platform close to the ground so it's always reachable
+      gap = 60 + rand() * 60;
+      y = 320 + rand() * 80;
+    } else {
+      gap = 90 + rand() * 70;
+      y = heightBase + rand() * heightRange;
+    }
+    curX += gap;
+    if (curX + w > 780) curX = 400 + rand() * 100;
+    platforms.push({x: curX, y, w, h: 20});
+    curX += w * 0.4;
+  }
+
+  // ---- Reachability check: prune any platform the player can't actually jump to ----
+  // (real physics max upward jump is ~140px given gravity 0.6 / jump velocity -13; capped
+  // at 100 here on purpose to leave real margin for touch-control timing error — jumps
+  // that are only reachable at 90%+ of the theoretical max feel "impossible" in practice)
+  function canJump(a, b) {
+    const dx = Math.abs((b.x + b.w/2) - (a.x + a.w/2));
+    const rise = a.y - b.y; // positive if b is higher up than a
+    if (rise > 0) return rise <= 100 && dx <= 200;
+    return dx <= 290; // dropping down or same level: generous
+  }
+  const n = platforms.length;
+  const visited = new Array(n).fill(false);
+  const dist = new Array(n).fill(Infinity);
+  visited[0] = true; dist[0] = 0;
+  const queue = [0];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (let j = 0; j < n; j++) {
+      if (!visited[j] && (canJump(platforms[cur], platforms[j]) || canJump(platforms[j], platforms[cur]))) {
+        visited[j] = true; dist[j] = dist[cur] + 1; queue.push(j);
+      }
+    }
+  }
+  const keptIdx = [];
+  for (let i = 0; i < n; i++) if (visited[i]) keptIdx.push(i);
+
+  if (keptIdx.length < 2) {
+    // extremely unlucky generation — fall back to a simple guaranteed-solvable layout
+    return {
+      platforms: [{x:0,y:410,w:220,h:40},{x:320,y:330,w:120,h:20},{x:520,y:260,w:120,h:20}],
+      gems: [{x:380,y:290},{x:580,y:220}],
+      enemies: [{x:520,y:246,range:40,speed:1.5,startX:520}],
+      spawn: {x:40, y:360},
+      portal: {x:580, y:220}
+    };
+  }
+
+  const keptPlatforms = keptIdx.map(i => platforms[i]);
+  // portal goes on the platform furthest (by jump-hops) from the ground, for a real "climb"
+  let portalOriginalIdx = keptIdx[0];
+  let maxDist = -1;
+  for (const i of keptIdx) {
+    if (i !== 0 && dist[i] > maxDist) { maxDist = dist[i]; portalOriginalIdx = i; }
+  }
+  const portalPlatform = platforms[portalOriginalIdx];
+  const portal = {x: portalPlatform.x + portalPlatform.w/2, y: Math.max(90, portalPlatform.y - 40)};
+
+  let gems = [];
+  keptPlatforms.slice(1).forEach(p => {
+    if (p !== portalPlatform && rand() > 0.15) gems.push({x: p.x + p.w/2, y: p.y - 35});
+  });
+
+  const enemyCount = Math.min(6, 1 + Math.floor(idx / 2));
+  const midPlatforms = keptPlatforms.slice(1).filter(p => p !== portalPlatform);
+  let enemies = [];
+  const usedPlatforms = new Set();
+  for (let i = 0; i < enemyCount && midPlatforms.length > 0; i++) {
+    const p = midPlatforms[Math.floor(rand() * midPlatforms.length)];
+    const key = p.x + '-' + p.y;
+    if (usedPlatforms.has(key)) continue;
+    usedPlatforms.add(key);
+    const speed = 1.4 + Math.min(2.8, idx * 0.12);
+    enemies.push({x: p.x + p.w/2, y: p.y - 14, range: Math.max(20, p.w/2 - 8), speed, startX: p.x + p.w/2});
+  }
+
+  return {
+    platforms: keptPlatforms, gems, enemies,
+    spawn: {x: 40, y: 360},
+    portal
+  };
+}
+
+let levels = makeLevels();
+function ensureLevel(i) {
+  while (levels.length <= i) levels.push(generateLevel(levels.length));
+}
+
+let levelIndex = 0;
+let gemsCollected = 0;
+let gemsThisLevel = 0;
+let tookDamageThisLevel = false;
+let lives = 3;
+let gameState = 'paused'; // paused, playing, lost
+let particles = [];
+let walkCycle = 0;
+let camShake = 0;
+
+function spawnParticles(x, y, color, count=10) {
+  for (let i=0;i<count;i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random()-0.5)*6,
+      vy: (Math.random()-0.5)*6 - 2,
+      life: 30 + Math.random()*15,
+      maxLife: 30,
+      color
+    });
+  }
+}
+
+let player, platforms, gems, enemies, portal;
+
+function loadLevel(i, rewardPrefix) {
+  const lvl = levels[i];
+  platforms = lvl.platforms;
+  gems = lvl.gems.map(g => ({...g, taken:false}));
+  enemies = lvl.enemies.map(e => ({...e, dir:1}));
+  portal = lvl.portal;
+  gemsThisLevel = 0;
+  tookDamageThisLevel = false;
+  player = {
+    x: lvl.spawn.x, y: lvl.spawn.y,
+    w: 28, h: 34,
+    vx: 0, vy: 0,
+    onGround: false,
+    facing: 1,
+    hurtTimer: 0
+  };
+  document.getElementById('lvl').textContent = i+1;
+  const baseMsg = i === 0
+    ? 'Arrow keys / WASD to move, Space or Up to jump. Reach the glowing portal!'
+    : i < 3
+      ? `Level ${i+1}! Watch out for the crystal golems.`
+      : `Level ${i+1} — the caverns grow deeper. Stay sharp!`;
+  document.getElementById('msg').textContent = (rewardPrefix || '') + baseMsg;
+  document.getElementById('restartBtn').style.display = 'none';
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+}
+
+function drawRoundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x+r, y);
+  c.arcTo(x+w, y, x+w, y+h, r);
+  c.arcTo(x+w, y+h, x, y+h, r);
+  c.arcTo(x, y+h, x, y, r);
+  c.arcTo(x, y, x+w, y, r);
+  c.closePath();
+}
+
+function resetPlayerPosition() {
+  const lvl = levels[levelIndex];
+  player.x = lvl.spawn.x;
+  player.y = lvl.spawn.y;
+  player.vx = 0; player.vy = 0;
+  player.hurtTimer = 60;
+}
+
+function update() {
+  if (gameState !== 'playing') return;
+
+  // horizontal input
+  const left = keys['arrowleft'] || keys['a'];
+  const right = keys['arrowright'] || keys['d'];
+  const jump = keys['arrowup'] || keys['w'] || keys[' '];
+
+  if (left) { player.vx -= 0.9; player.facing = -1; }
+  if (right) { player.vx += 0.9; player.facing = 1; }
+  player.vx *= FRICTION;
+  if (Math.abs(player.vx) > 6) player.vx = 6 * Math.sign(player.vx);
+
+  if (jump && player.onGround) {
+    player.vy = -13;
+    player.onGround = false;
+    sfxJump();
+    spawnParticles(player.x + player.w/2, player.y + player.h, '176,224,230', 6);
+  }
+
+  if (Math.abs(player.vx) > 0.5 && player.onGround) {
+    walkCycle += Math.abs(player.vx) * 0.15;
+  }
+
+  player.vy += GRAVITY;
+  if (player.vy > 16) player.vy = 16;
+
+  player.x += player.vx;
+  player.y += player.vy;
+
+  // world bounds
+  if (player.x < 0) player.x = 0;
+  if (player.x + player.w > W) player.x = W - player.w;
+  if (player.y > H + 100) {
+    loseLife();
+    return;
+  }
+
+  // platform collision (simple AABB with resolution)
+  player.onGround = false;
+  for (const p of platforms) {
+    if (rectsOverlap(player, p)) {
+      // compute overlap on each axis using previous position approx
+      const prevBottom = player.y + player.h - player.vy;
+      if (player.vy >= 0 && prevBottom <= p.y + 1) {
+        player.y = p.y - player.h;
+        player.vy = 0;
+        player.onGround = true;
+      } else if (player.vy < 0 && player.y - player.vy >= p.y + p.h - 1) {
+        player.y = p.y + p.h;
+        player.vy = 0;
+      } else {
+        if (player.vx > 0) player.x = p.x - player.w;
+        else if (player.vx < 0) player.x = p.x + p.w;
+        player.vx = 0;
+      }
+    }
+  }
+
+  // gems
+  for (const g of gems) {
+    if (!g.taken) {
+      const gemBox = {x:g.x-10, y:g.y-10, w:20, h:20};
+      if (rectsOverlap(player, gemBox)) {
+        g.taken = true;
+        gemsCollected++;
+        gemsThisLevel++;
+        stats.totalGems = (stats.totalGems || 0) + 1;
+        saveStats();
+        document.getElementById('gems').textContent = gemsCollected;
+        sfxGem();
+        spawnParticles(g.x, g.y, '160,231,229', 14);
+      }
+    }
+  }
+
+  // enemies patrol
+  for (const e of enemies) {
+    e.x += e.dir * e.speed;
+    if (e.x < e.startX - e.range) e.dir = 1;
+    if (e.x > e.startX + e.range) e.dir = -1;
+    const eBox = {x:e.x-14, y:e.y-14, w:28, h:28};
+    if (player.hurtTimer <= 0 && rectsOverlap(player, eBox)) {
+      loseLife();
+      return;
+    }
+  }
+  if (player.hurtTimer > 0) player.hurtTimer--;
+  if (camShake > 0) camShake--;
+
+  // particles physics
+  for (const p of particles) {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life--;
+  }
+  particles = particles.filter(p => p.life > 0);
+
+  // portal
+  const portalBox = {x:portal.x-16, y:portal.y-16, w:32, h:32};
+  if (rectsOverlap(player, portalBox)) {
+    sfxPortal();
+    spawnParticles(portal.x, portal.y, '255,209,102', 20);
+    const clearBonus = 5 * (levelIndex + 1);
+    const reward = gemsThisLevel + clearBonus;
+    addGemsToWallet(reward);
+    const clearedLevel = levelIndex + 1;
+    if (clearedLevel > (stats.highestLevel || 0)) {
+      stats.highestLevel = clearedLevel;
+    }
+    if (!tookDamageThisLevel) {
+      stats.noHitLevels = (stats.noHitLevels || 0) + 1;
+    }
+    saveStats();
+    levelIndex++;
+    ensureLevel(levelIndex);
+    loadLevel(levelIndex, `✅ Mission complete! +${reward} 💎 banked. `);
+  }
+}
+
+function loseLife() {
+  lives--;
+  tookDamageThisLevel = true;
+  document.getElementById('lives').textContent = lives;
+  camShake = 12;
+  sfxHurt();
+  spawnParticles(player.x + player.w/2, player.y + player.h/2, '230,57,70', 12);
+  if (lives <= 0) {
+    gameState = 'lost';
+    const runLevel = levelIndex + 1;
+    const isNewBest = !bestRun || runLevel > bestRun.level || (runLevel === bestRun.level && gemsCollected > bestRun.gems);
+    recordRunResult(runLevel, gemsCollected);
+    document.getElementById('msg').textContent = isNewBest
+      ? `Game over! New best — Level ${runLevel}, ${gemsCollected} 💎 🏆`
+      : `Game over! You reached Level ${runLevel} with ${gemsCollected} 💎.`;
+    document.getElementById('restartBtn').style.display = 'inline-block';
+  } else {
+    resetPlayerPosition();
+    document.getElementById('msg').textContent = `Ouch! ${lives} lives left.`;
+  }
+}
+
+function draw() {
+  ctx.save();
+  if (camShake > 0) {
+    ctx.translate((Math.random()-0.5)*camShake, (Math.random()-0.5)*camShake);
+  }
+
+  ctx.clearRect(-20,-20,W+40,H+40);
+
+  // background gradient
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, theme.bg1);
+  grad.addColorStop(0.6, '#16213e');
+  grad.addColorStop(1, theme.bg2);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // parallax crystal silhouettes (background mountains)
+  ctx.fillStyle = 'rgba(80,110,160,0.25)';
+  for (let i=0;i<6;i++) {
+    const bx = ((i*180) - (Date.now()*0.005)%180);
+    ctx.beginPath();
+    ctx.moveTo(bx, H);
+    ctx.lineTo(bx+60, H-120-((i%3)*20));
+    ctx.lineTo(bx+120, H);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // twinkling stars
+  for (let i=0;i<40;i++) {
+    const sx = (i*173)%W, sy=(i*89)%(H*0.7);
+    const tw = 0.15 + 0.15*Math.sin(Date.now()/400 + i);
+    ctx.fillStyle = `rgba(255,255,255,${tw})`;
+    ctx.fillRect(sx, sy, 2, 2);
+  }
+
+  // platforms with crystal texture
+  for (const p of platforms) {
+    const pg = ctx.createLinearGradient(p.x,p.y,p.x,p.y+p.h);
+    pg.addColorStop(0, theme.platformTop);
+    pg.addColorStop(1, theme.platformBottom);
+    ctx.fillStyle = pg;
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    // top highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(p.x, p.y, p.w, 3);
+    // little crystal studs
+    ctx.fillStyle = theme.gem + '80';
+    for (let sx = p.x+10; sx < p.x+p.w-5; sx += 26) {
+      ctx.beginPath();
+      ctx.moveTo(sx, p.y+2);
+      ctx.lineTo(sx+4, p.y+8);
+      ctx.lineTo(sx-4, p.y+8);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.strokeStyle = theme.platformStroke;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(p.x, p.y, p.w, p.h);
+  }
+
+  // gems (rotating diamond with sparkle)
+  for (const g of gems) {
+    if (g.taken) continue;
+    const bob = Math.sin(Date.now()/300 + g.x) * 3;
+    ctx.save();
+    ctx.translate(g.x, g.y + bob);
+    ctx.rotate(Date.now()/600 % (Math.PI*2));
+    ctx.fillStyle = theme.gem;
+    ctx.shadowColor = theme.gem;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(0,-10); ctx.lineTo(8,0); ctx.lineTo(0,10); ctx.lineTo(-8,0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(0,-6); ctx.lineTo(3,0); ctx.lineTo(0,2); ctx.lineTo(-3,0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // portal (double ring swirl)
+  ctx.save();
+  ctx.translate(portal.x, portal.y);
+  const pulse = 18 + Math.sin(Date.now()/200)*4;
+  const rg = ctx.createRadialGradient(0,0,2,0,0,pulse);
+  rg.addColorStop(0, 'rgba(255,255,255,0.9)');
+  rg.addColorStop(0.5, `rgba(${theme.portalRGB},0.8)`);
+  rg.addColorStop(1, `rgba(${theme.portalRGB},0)`);
+  ctx.fillStyle = rg;
+  ctx.shadowColor = theme.accent;
+  ctx.shadowBlur = 25;
+  ctx.beginPath();
+  ctx.arc(0,0,pulse,0,Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.lineWidth = 2;
+  ctx.rotate(Date.now()/400);
+  ctx.beginPath();
+  ctx.ellipse(0,0,pulse+6,pulse*0.4,0,0,Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+
+  // enemies: floating crystal golem eyeball
+  for (const e of enemies) {
+    const bob = Math.sin(Date.now()/250 + e.x) * 4;
+    ctx.save();
+    ctx.translate(e.x, e.y + bob);
+    ctx.shadowColor = theme.enemy;
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = theme.enemyDark;
+    ctx.beginPath();
+    ctx.moveTo(0,-15); ctx.lineTo(15,0); ctx.lineTo(0,15); ctx.lineTo(-15,0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = theme.enemy;
+    ctx.beginPath();
+    ctx.moveTo(0,-11); ctx.lineTo(11,0); ctx.lineTo(0,11); ctx.lineTo(-11,0);
+    ctx.closePath();
+    ctx.fill();
+    // eye
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(0,0,5,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#1a1a2e';
+    const lookX = Math.sign(e.dir) * 1.5;
+    ctx.beginPath();
+    ctx.arc(lookX,0,2.4,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // particles
+  for (const p of particles) {
+    const a = Math.max(0, p.life / p.maxLife);
+    ctx.fillStyle = `rgba(${p.color},${a})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.5*a+1, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // player: little adventurer with legs + cape
+  ctx.save();
+  const flashOn = player.hurtTimer > 0 && Math.floor(player.hurtTimer/5)%2===0;
+  ctx.globalAlpha = flashOn ? 0.4 : 1;
+  const bob = player.onGround ? Math.sin(walkCycle) * 2 : 0;
+  ctx.translate(player.x + player.w/2, player.y + player.h/2 + bob);
+  ctx.scale(player.facing, 1);
+
+  const legSwing = player.onGround ? Math.sin(walkCycle) * 6 : 0;
+  ctx.strokeStyle = '#3a2f1a';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  // legs
+  ctx.beginPath();
+  ctx.moveTo(-6, player.h/2 - 6); ctx.lineTo(-6 + legSwing, player.h/2 + 6);
+  ctx.moveTo(6, player.h/2 - 6); ctx.lineTo(6 - legSwing, player.h/2 + 6);
+  ctx.stroke();
+
+  // cape
+  ctx.fillStyle = theme.enemy;
+  ctx.beginPath();
+  ctx.moveTo(-player.w/2+2, -player.h/2+4);
+  ctx.quadraticCurveTo(-player.w/2-8-Math.abs(player.vx), 4, -player.w/2+2, player.h/2-2);
+  ctx.closePath();
+  ctx.fill();
+
+  // body
+  const bodyGrad = ctx.createLinearGradient(0,-player.h/2,0,player.h/2);
+  bodyGrad.addColorStop(0, '#ffe08a');
+  bodyGrad.addColorStop(1, '#ffb703');
+  ctx.fillStyle = bodyGrad;
+  drawRoundRect(ctx, -player.w/2, -player.h/2, player.w, player.h, 6);
+  ctx.fill();
+  ctx.strokeStyle = '#c98a00';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // face
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath();
+  ctx.arc(5, -6, 2.5, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = '#1a1a2e';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(4, 0, 4, 0.1*Math.PI, 0.9*Math.PI);
+  ctx.stroke();
+
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
+  ctx.restore(); // camera shake
+
+  if (gameState === 'lost') {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = theme.accent;
+    ctx.font = 'bold 36px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = theme.accent;
+    ctx.shadowBlur = 15;
+    ctx.fillText('Game Over', W/2, H/2);
+    ctx.shadowBlur = 0;
+  }
+}
+
+function loop() {
+  try {
+    update();
+    draw();
+  } catch (err) {
+    console.error('Game loop error:', err);
+  }
+  requestAnimationFrame(loop);
+}
+
+function restartGame() {
+  levelIndex = 0;
+  gemsCollected = 0;
+  lives = 3;
+  particles = [];
+  stats.gamesPlayed = (stats.gamesPlayed || 0) + 1;
+  saveStats();
+  document.getElementById('gems').textContent = 0;
+  document.getElementById('lives').textContent = 3;
+  document.getElementById('restartBtn').style.display = 'none';
+  gameState = 'playing';
+  loadLevel(0);
+}
+
+window.addEventListener('keydown', e => {
+  if (e.key.toLowerCase() === 'r' && gameState === 'lost') {
+    restartGame();
+  }
+});
+const restartBtnEl = document.getElementById('restartBtn');
+restartBtnEl.addEventListener('click', restartGame);
+restartBtnEl.addEventListener('touchend', (e) => { e.preventDefault(); restartGame(); });
+
+loadLevel(0);
+loop();
+</script>
+</body>
+</html>
