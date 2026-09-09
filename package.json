@@ -1,0 +1,19 @@
+{
+  "name": "crystal-caverns",
+  "version": "1.0.0",
+  "scripts": {
+    "capacitor:sync:after": "node node_modules/capacitor-levelplay-ads/scripts/levelplay-manifest.js"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/android": "^8.0.0",
+    "capacitor-levelplay-ads": "latest"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0"
+  },
+  "levelplay": {
+    "networks": ["unityads"],
+    "consentProvider": "custom"
+  }
+}
