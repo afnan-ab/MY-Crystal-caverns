@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "778486188854",
+    "project_id": "my-crystal-caverns",
+    "storage_bucket": "my-crystal-caverns.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:778486188854:android:f826503ad499d1d8764197",
+        "android_client_info": {
+          "package_name": "com.crystalcaverns.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAaIAjsRTarxHGTmtRYMIcPcunR6zej7Bs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
