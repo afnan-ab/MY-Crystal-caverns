@@ -29,7 +29,7 @@ jobs:
           cp google-services.json android/app/google-services.json
           sed -i "s#classpath 'com.android.tools.build:gradle:[^']*'#&\n        classpath 'com.google.gms:google-services:4.4.2'#" android/build.gradle
           sed -i "1s#^#apply plugin: 'com.google.gms.google-services'\n#" android/app/build.gradle
-          sed -i "0,/dependencies {/{s#dependencies {#dependencies {\n    implementation 'com.google.firebase:firebase-analytics'#}" android/app/build.gradle
+          sed -i "0,/dependencies {/{s#dependencies {#dependencies {\n    implementation platform('com.google.firebase:firebase-bom:34.17.0')\n    implementation 'com.google.firebase:firebase-analytics'#}" android/app/build.gradle
       - name: Sync web assets into Android project
         run: npx cap sync android
       - name: Build debug APK
@@ -40,4 +40,3 @@ jobs:
         with:
           name: crystal-caverns-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          
